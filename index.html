@@ -1,0 +1,86 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Scanner</title>
+    <style>
+        #document {
+            position: relative;
+        }
+        .marker {
+            position: absolute;
+            background-color: red;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        video, canvas {
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Document Scanner</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <button id="captureBtn">Capture</button>
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+    <div id="document">
+        <img id="documentImg" src="" alt="Document" style="max-width: 100%;">
+    </div>
+    <div id="info"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const context = canvas.getContext('2d');
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing the camera: ", err);
+            });
+
+        captureBtn.addEventListener('click', () => {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg);base64,/, '');
+
+            fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.filename) {
+                    fetch(`/process/${data.filename}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('documentImg').src = `/uploads/${data.filename}`;
+                            data.sections.forEach(section => {
+                                const marker = document.createElement('div');
+                                marker.className = 'marker';
+                                marker.style.left = `${section.position[0]}px`;
+                                marker.style.top = `${section.position[1]}px`;
+                                marker.onclick = () => showInfo(section.text);
+                                document.getElementById('document').appendChild(marker);
+                            });
+                        });
+                }
+            });
+        });
+
+        function showInfo(text) {
+            document.getElementById('info').innerText = `Section: ${text}`;
+        }
+    </script>
+</body>
+</html>
